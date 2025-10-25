@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "id": "bettersprint",
+  "version": "${version}",
+  "name": "BetterSprint",
+  "description": "Fabric mod that improves minecraft's sprint controls.",
+  "authors": ["TfourJ"],
+  "contact": {
+    "homepage": "https://github.com/TfourJ/BetterSprint",
+    "sources": "https://github.com/TfourJ/BetterSprint",
+    "issues": "https://github.com/TfourJ/BetterSprint/issues"
+  },
+  "license": "GPL-3.0",
+  "icon": "assets/bettersprint/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "fabric-datagen": [
+      "me.tfourj.bettersprint.client.BettersprintDataGenerator"
+    ],
+    "client": [
+      "me.tfourj.bettersprint.client.BettersprintClient"
+    ],
+    "modmenu": [
+      "me.tfourj.bettersprint.config.UseModMenu"
+    ],
+    "main": [
+      "me.tfourj.bettersprint.Bettersprint"
+    ]
+  },
+  "mixins": [
+    "bettersprint.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "fabric": "*",
+    "minecraft": "${minecraft_version}"
+  }
+}
