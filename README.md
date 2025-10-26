@@ -2,8 +2,6 @@
   <img src=".github/assets/bettersprint_1024.png" alt="BetterSprint logo" width="256">
 </p>
 
-# BetterSprint
-
 BetterSprint improves Minecraft's sprint toggle by showing status in HUD and persistent state across restarts.
 
 ## Requirements
