@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - '*'
 
 jobs:
   build-and-release:
@@ -36,7 +36,11 @@ jobs:
             echo "No release jar found in build/libs" >&2
             exit 1
           fi
-          echo "artifact=$ARTIFACT" >> "$GITHUB_OUTPUT"
+
+          RELEASE_JAR="build/libs/bettersprint-${GITHUB_REF_NAME}.jar"
+          cp "$ARTIFACT" "$RELEASE_JAR"
+
+          echo "artifact=$RELEASE_JAR" >> "$GITHUB_OUTPUT"
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
