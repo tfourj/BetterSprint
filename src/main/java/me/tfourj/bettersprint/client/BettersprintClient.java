@@ -1,25 +1,32 @@
 package me.tfourj.bettersprint.client;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import me.tfourj.bettersprint.config.BetterSprintConfig;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
-import net.minecraft.util.Identifier;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.option.KeyBinding;
-import net.minecraft.client.option.KeyBinding.Category;
-import net.minecraft.client.util.InputUtil;
-import net.minecraft.text.Text;
+import net.minecraft.client.DeltaTracker;
+import net.minecraft.client.KeyMapping;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import org.lwjgl.glfw.GLFW;
 
 public class BettersprintClient implements ClientModInitializer {
-    private static final Text INDICATOR_ON = Text.translatable("text.bettersprint.indicator.enabled");
-    private static final Text INDICATOR_OFF = Text.translatable("text.bettersprint.indicator.disabled");
+    private static final Component INDICATOR_ON =
+            Component.translatable("text.bettersprint.indicator.enabled");
+    private static final Component INDICATOR_OFF =
+            Component.translatable("text.bettersprint.indicator.disabled");
 
-    private static KeyBinding toggleSprintKey;
+    private static final KeyMapping.Category CATEGORY = KeyMapping.Category.register(
+            Identifier.fromNamespaceAndPath("bettersprint", "general")
+    );
+
+    private static KeyMapping toggleSprintKey;
+
     private static boolean sprintToggled;
     private static boolean wasSprinting = false;
     private static boolean lastSneakState = false;
@@ -29,54 +36,53 @@ public class BettersprintClient implements ClientModInitializer {
     public void onInitializeClient() {
         BetterSprintConfig.load();
         sprintToggled = BetterSprintConfig.get().sprintToggled;
+
         registerKeyBindings();
         registerClientEvents();
     }
 
     private void registerKeyBindings() {
-        toggleSprintKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+        toggleSprintKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key.bettersprint.toggle_sprint",
-                InputUtil.Type.KEYSYM,
+                InputConstants.Type.KEYSYM,
                 GLFW.GLFW_KEY_G,
-                Category.MOVEMENT
+                CATEGORY
         ));
     }
 
     private void registerClientEvents() {
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            if (client.player == null || client.world == null) {
-                applySprintKey(client, false);
-                return;
-            }
-
-            while (toggleSprintKey.wasPressed()) {
+            while (toggleSprintKey.consumeClick()) {
                 sprintToggled = !sprintToggled;
                 BetterSprintConfig.get().sprintToggled = sprintToggled;
                 BetterSprintConfig.save();
             }
 
-            applySprintKey(client, sprintToggled);
+            if (client.player == null || client.level == null) {
+                return;
+            }
+
+            applySprint(client, sprintToggled);
         });
 
-        System.out.println("BetterSprint: Registering HUD element");
         HudElementRegistry.attachElementBefore(
-            VanillaHudElements.CHAT, 
-            Identifier.of("bettersprint", "sprint_indicator"), 
-            this::renderHudIndicator
+                VanillaHudElements.CHAT,
+                Identifier.fromNamespaceAndPath("bettersprint", "sprint_indicator"),
+                this::renderHudIndicator
         );
     }
 
-    private void applySprintKey(MinecraftClient client, boolean toggled) {
-        if (client.player == null) return;
-        
-        KeyBinding sprintKey = client.options.sprintKey;
-        boolean physicallyPressed = isPhysicallyPressed(client, sprintKey);
+    private void applySprint(Minecraft client, boolean toggled) {
+        if (client.player == null) {
+            return;
+        }
+
+        KeyMapping sprintKey = client.options.keySprint;
+        boolean currentSneaking = client.player.isShiftKeyDown();
         boolean autoSprint = toggled && shouldAutoSprint(client);
-        boolean currentSneaking = client.player.isSneaking();
-        
+
         BetterSprintConfig config = BetterSprintConfig.get();
-        
-        // FOV jitter fix
+
         if (config.reduceFovJitter) {
             if (currentSneaking != lastSneakState) {
                 fovStabilizationTicks = 5;
@@ -88,7 +94,7 @@ public class BettersprintClient implements ClientModInitializer {
             }
 
             if (currentSneaking) {
-                sprintKey.setPressed(false);
+                sprintKey.setDown(false);
 
                 if (client.player.isSprinting() && fovStabilizationTicks <= 3) {
                     client.player.setSprinting(false);
@@ -99,14 +105,16 @@ public class BettersprintClient implements ClientModInitializer {
 
             if (wasSprinting && !currentSneaking && !client.player.isSprinting()) {
                 wasSprinting = false;
+
                 if (fovStabilizationTicks > 0) {
-                    sprintKey.setPressed(false);
+                    sprintKey.setDown(false);
                     return;
                 }
             }
         } else {
             if (currentSneaking) {
-                sprintKey.setPressed(false);
+                sprintKey.setDown(false);
+
                 if (client.player.isSprinting()) {
                     client.player.setSprinting(false);
                 }
@@ -114,45 +122,31 @@ public class BettersprintClient implements ClientModInitializer {
             }
         }
 
-        sprintKey.setPressed(physicallyPressed || autoSprint);
+        sprintKey.setDown(autoSprint);
 
-        if (!physicallyPressed && !autoSprint && client.player.isSprinting()) {
+        if (!autoSprint && client.player.isSprinting()) {
             client.player.setSprinting(false);
         }
     }
 
-    private boolean isPhysicallyPressed(MinecraftClient client, KeyBinding keyBinding) {
-        if (keyBinding.isUnbound()) {
-            return false;
-        }
-
-        var boundKey = KeyBindingHelper.getBoundKeyOf(keyBinding);
-
-        if (boundKey.getCategory() == InputUtil.Type.MOUSE) {
-            return GLFW.glfwGetMouseButton(client.getWindow().getHandle(), boundKey.getCode()) == GLFW.GLFW_PRESS;
-        }
-
-        return InputUtil.isKeyPressed(client.getWindow(), boundKey.getCode());
-    }
-
-    private boolean shouldAutoSprint(MinecraftClient client) {
+    private boolean shouldAutoSprint(Minecraft client) {
         if (client.player == null) {
             return false;
         }
 
-        if (client.player.isSneaking()) {
+        if (client.player.isShiftKeyDown()) {
             return false;
         }
 
-        return client.options.forwardKey.isPressed();
+        return client.options.keyUp.isDown();
     }
 
-    private void renderHudIndicator(DrawContext context, net.minecraft.client.render.RenderTickCounter tickCounter) {
+    private void renderHudIndicator(GuiGraphicsExtractor graphics, DeltaTracker deltaTracker) {
         try {
             BetterSprintConfig config = BetterSprintConfig.get();
-            MinecraftClient client = MinecraftClient.getInstance();
+            Minecraft client = Minecraft.getInstance();
 
-            if (client.player == null || client.textRenderer == null || config == null) {
+            if (client.player == null || client.font == null || config == null) {
                 return;
             }
 
@@ -160,8 +154,8 @@ public class BettersprintClient implements ClientModInitializer {
                 return;
             }
 
-            int screenWidth = context.getScaledWindowWidth();
-            int screenHeight = context.getScaledWindowHeight();
+            int screenWidth = client.getWindow().getGuiScaledWidth();
+            int screenHeight = client.getWindow().getGuiScaledHeight();
 
             if (screenWidth <= 0 || screenHeight <= 0) {
                 return;
@@ -171,43 +165,47 @@ public class BettersprintClient implements ClientModInitializer {
             double safeX = Math.max(0.0, Math.min(1.0, config.indicatorX));
             double safeY = Math.max(0.0, Math.min(1.0, config.indicatorY));
 
-            float x = (float) (safeX * screenWidth);
-            float y = (float) (safeY * screenHeight);
+            Component text = sprintToggled ? INDICATOR_ON : INDICATOR_OFF;
 
-            Text text = sprintToggled ? INDICATOR_ON : INDICATOR_OFF;
+            int textWidth = client.font.width(text);
+            int textHeight = client.font.lineHeight;
 
-            int textWidth = client.textRenderer.getWidth(text);
-            int textHeight = client.textRenderer.fontHeight;
-            int scaledWidth = (int) (textWidth * scale);
-            int scaledHeight = (int) (textHeight * scale);
-            int finalX = (int) (x - scaledWidth / 2);
-            int finalY = (int) (y - scaledHeight / 2);
+            int scaledWidth = Math.max(1, Math.round(textWidth * scale));
+            int scaledHeight = Math.max(1, Math.round(textHeight * scale));
 
-            MinecraftClient mc = MinecraftClient.getInstance();
-            if (mc.getWindow() == null) return;
+            int centerX = (int) Math.round(safeX * screenWidth);
+            int centerY = (int) Math.round(safeY * screenHeight);
 
-            if (config.indicatorBackground || config.indicatorBorder) {
-                int bgX1 = finalX - 3;
-                int bgY1 = finalY - 2;
-                int bgX2 = finalX + scaledWidth + 3;
-                int bgY2 = finalY + scaledHeight + 2;
+            int finalX = centerX - (scaledWidth / 2);
+            int finalY = centerY - (scaledHeight / 2);
 
-                if (config.indicatorBackground) {
-                    context.fill(bgX1, bgY1, bgX2, bgY2, 0x80000000); // Semi-transparent black background
-                }
+            int bgX1 = finalX - 3;
+            int bgY1 = finalY - 2;
+            int bgX2 = finalX + scaledWidth + 3;
+            int bgY2 = finalY + scaledHeight + 2;
 
-                if (config.indicatorBorder) {
-                    context.fill(bgX1 - 1, bgY1 - 1, bgX2 + 1, bgY1, 0xFFFFFFFF); // Top border
-                    context.fill(bgX1 - 1, bgY2, bgX2 + 1, bgY2 + 1, 0xFFFFFFFF); // Bottom border
-                    context.fill(bgX1 - 1, bgY1, bgX1, bgY2, 0xFFFFFFFF); // Left border
-                    context.fill(bgX2, bgY1, bgX2 + 1, bgY2, 0xFFFFFFFF); // Right border
-                }
+            if (config.indicatorBackground) {
+                graphics.fill(bgX1, bgY1, bgX2, bgY2, 0x80000000);
             }
 
-            int textColor = sprintToggled ? 0xFF00FF00 : 0xFFFF0000; // Bright green/red
-            context.drawText(mc.textRenderer, text, finalX, finalY, textColor, false);
+            if (config.indicatorBorder) {
+                graphics.fill(bgX1 - 1, bgY1 - 1, bgX2 + 1, bgY1, 0xFFFFFFFF);
+                graphics.fill(bgX1 - 1, bgY2, bgX2 + 1, bgY2 + 1, 0xFFFFFFFF);
+                graphics.fill(bgX1 - 1, bgY1, bgX1, bgY2, 0xFFFFFFFF);
+                graphics.fill(bgX2, bgY1, bgX2 + 1, bgY2, 0xFFFFFFFF);
+            }
 
-            float tickProgress = tickCounter.getTickProgress(false);
+            int textColor = sprintToggled ? 0xFF00FF00 : 0xFFFF0000;
+
+            // GuiGraphicsExtractor text drawing is the 26.1 GUI/HUD path
+            graphics.text(
+                    client.font,
+                    text,
+                    finalX,
+                    finalY,
+                    textColor,
+                    config.indicatorShadow
+            );
 
         } catch (Exception e) {
             System.err.println("Error rendering sprint indicator: " + e.getMessage());
