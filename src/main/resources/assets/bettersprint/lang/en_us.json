@@ -17,8 +17,7 @@
   "config.bettersprint.option.indicator_border.desc": "Show a border around the indicator background.",
   "config.bettersprint.option.reduce_fov_jitter": "Reduce FOV jitter",
   "config.bettersprint.option.reduce_fov_jitter.desc": "Reduce field-of-view jitter when transitioning between sprinting and sneaking states.",
-  "category.bettersprint.keybinds": "Better Sprint",
-  "key.bettersprint.toggle_sprint": "Toggle sprint",
+  "key.bettersprint.toggle_sprint": "Toggle Sprint",
   "text.bettersprint.indicator.enabled": "Sprint ON",
   "text.bettersprint.indicator.disabled": "Sprint OFF"
 }

@@ -21,10 +21,6 @@ public class BettersprintClient implements ClientModInitializer {
     private static final Component INDICATOR_OFF =
             Component.translatable("text.bettersprint.indicator.disabled");
 
-    private static final KeyMapping.Category CATEGORY = KeyMapping.Category.register(
-            Identifier.fromNamespaceAndPath("bettersprint", "general")
-    );
-
     private static KeyMapping toggleSprintKey;
 
     private static boolean sprintToggled;
@@ -46,7 +42,7 @@ public class BettersprintClient implements ClientModInitializer {
                 "key.bettersprint.toggle_sprint",
                 InputConstants.Type.KEYSYM,
                 GLFW.GLFW_KEY_G,
-                CATEGORY
+                KeyMapping.Category.MOVEMENT
         ));
     }
 
